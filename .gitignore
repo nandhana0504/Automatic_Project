@@ -15,13 +15,13 @@ labels/
 # --------------------
 # Outputs & Results
 # --------------------
-outputs/
+outputs/*
+!outputs/accuracy_report.xlsx
+
 results/
 predictions/
 runs/
 *.csv
-!accuracy_report.xlsx   # keep ONLY accuracy excel
-!metrics.xlsx
 
 # --------------------
 # Model files
@@ -29,9 +29,6 @@ runs/
 *.pth
 *.pt
 *.h5
-
-# If model is small and you WANT it, comment above and use:
-# model.pth
 
 # --------------------
 # Python cache
