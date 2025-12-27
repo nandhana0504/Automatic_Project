@@ -5,44 +5,45 @@ import numpy as np
 from torch.utils.data import Dataset
 
 class CephDataset(Dataset):
-    def __init__(self, image_dir, ann_dir, img_size=256, hm_size=64, sigma=2):
+    def __init__(self, image_dir, anno_dir, img_size=256, sigma=5):
         self.image_dir = image_dir
-        self.ann_dir = ann_dir
+        self.anno_dir = anno_dir
         self.img_size = img_size
-        self.hm_size = hm_size
         self.sigma = sigma
-        self.images = sorted([f for f in os.listdir(image_dir) if f.endswith(".bmp")])
-
-    def gaussian(self, h, w, cx, cy):
-        y, x = np.ogrid[:h, :w]
-        return np.exp(-((x-cx)**2 + (y-cy)**2) / (2*self.sigma**2))
+        self.images = sorted(os.listdir(image_dir))
 
     def __len__(self):
         return len(self.images)
 
+    def _gaussian_heatmap(self, center, size):
+        x = np.arange(0, size, 1, float)
+        y = x[:, np.newaxis]
+        x0, y0 = center
+        return np.exp(-((x - x0)**2 + (y - y0)**2) / (2 * self.sigma**2))
+
     def __getitem__(self, idx):
         img_name = self.images[idx]
+        img_path = os.path.join(self.image_dir, img_name)
+        anno_path = os.path.join(self.anno_dir, img_name.replace('.bmp', '.txt'))
 
-        img = cv2.imread(os.path.join(self.image_dir, img_name), cv2.IMREAD_GRAYSCALE)
-        h, w = img.shape
+        image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        h, w = image.shape
+        image = cv2.resize(image, (self.img_size, self.img_size))
+        image = image / 255.0
+        image = torch.tensor(image, dtype=torch.float32)
+        image = image.unsqueeze(0).repeat(3, 1, 1)  # 1 → 3 channels
 
-        img = cv2.resize(img, (self.img_size, self.img_size))
-        img = torch.tensor(img / 255.0, dtype=torch.float32).unsqueeze(0)
 
-        ann_path = os.path.join(self.ann_dir, img_name.replace(".bmp", ".txt"))
+        coords = []
+        with open(anno_path, 'r') as f:
+            for line in f.readlines()[:19]:
+                x, y = map(float, line.strip().split(','))
+                x = x * self.img_size / w
+                y = y * self.img_size / h
+                coords.append((x, y))
 
-        points = []
-        with open(ann_path) as f:
-            for line in f:
-                if "," in line:
-                    x, y = map(float, line.strip().split(","))
-                    points.append([x, y])
+        heatmaps = np.zeros((19, self.img_size, self.img_size), dtype=np.float32)
+        for i, (x, y) in enumerate(coords):
+            heatmaps[i] = self._gaussian_heatmap((x, y), self.img_size)
 
-        heatmaps = np.zeros((len(points), self.hm_size, self.hm_size), dtype=np.float32)
-
-        for i, (x, y) in enumerate(points):
-            hx = int(x * self.hm_size / w)
-            hy = int(y * self.hm_size / h)
-            heatmaps[i] = self.gaussian(self.hm_size, self.hm_size, hx, hy)
-
-        return img, torch.tensor(heatmaps)
+        return image, torch.tensor(heatmaps)

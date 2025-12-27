@@ -1,40 +1,35 @@
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from src.dataset import CephDataset
 from src.model import LandmarkModel
-import os
 
 def train():
-    dataset = CephDataset(
-        "data/images",
-        "data/annotations",
-        sigma=2
-    )
+    device = torch.device("cpu")
 
+    dataset = CephDataset("data/images", "data/annotations")
     loader = DataLoader(dataset, batch_size=4, shuffle=True)
 
-    model = LandmarkModel()
+    model = LandmarkModel().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    loss_fn = torch.nn.MSELoss()
+    loss_fn = nn.MSELoss()
 
-    model.train()
-
-    for epoch in range(150):
+    epochs = 120
+    for epoch in range(epochs):
         total_loss = 0
         for img, hm in loader:
+            img, hm = img.to(device), hm.to(device)
             pred = model(img)
             loss = loss_fn(pred, hm)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             total_loss += loss.item()
 
-        print(f"Epoch [{epoch+1}/150] Loss: {total_loss:.4f}")
+        print(f"Epoch [{epoch+1}/{epochs}] Loss: {total_loss/len(loader):.4f}")
 
-    os.makedirs("outputs", exist_ok=True)
-    torch.save(model.state_dict(), "outputs/model.pth")
+    torch.save(model.state_dict(), "model.pth")
     print("✅ Model saved")
 
 if __name__ == "__main__":

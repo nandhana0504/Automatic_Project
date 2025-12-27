@@ -4,80 +4,58 @@ import torch
 import numpy as np
 from src.model import LandmarkModel
 
-IMAGE_DIR = "data/images"
-ANN_DIR = "data/annotations"
-MODEL_PATH = "outputs/model.pth"
-IMAGE_SIZE = 256
-MM_THRESHOLD = 2.0   # company requirement
+IMG_SIZE = 256
+PIXEL_TO_MM = 0.1
+THRESH_MM = 2.0
 
-def load_annotations(path):
-    points = []
-    with open(path) as f:
-        for line in f:
-            if "," in line:
-                x, y = map(float, line.strip().split(","))
-                points.append([x, y])
-    return np.array(points)
+device = torch.device("cpu")
+model = LandmarkModel()
+model.load_state_dict(torch.load("model.pth", map_location=device))
+model.eval()
 
-def heatmap_to_coord(hm):
-    idx = torch.argmax(hm)
-    y = idx // hm.shape[1]
-    x = idx % hm.shape[1]
-    return x.item(), y.item()
+def get_coords(heatmaps):
+    coords = []
+    for hm in heatmaps:
+        y, x = np.unravel_index(np.argmax(hm), hm.shape)
+        coords.append((x, y))
+    return coords
 
-def main():
-    model = LandmarkModel()
-    model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
-    model.eval()
+correct = 0
+total = 0
 
-    total = 0
-    correct = 0
+for name in sorted(os.listdir("data/images")):
+    img = cv2.imread(f"data/images/{name}", cv2.IMREAD_GRAYSCALE)
+    h, w = img.shape
+    img_r = cv2.resize(img, (IMG_SIZE, IMG_SIZE)) / 255.0
+    img_t = torch.tensor(img_r).unsqueeze(0)
+    img_t = img_t.repeat(3, 1, 1)
+    img_t = img_t.unsqueeze(0).float()
 
-    for img_name in sorted(os.listdir(IMAGE_DIR)):
-        print(f"🔍 Processing: {img_name}")
 
-        img_path = os.path.join(IMAGE_DIR, img_name)
-        ann_path = os.path.join(
-            ANN_DIR, img_name.replace(".bmp", ".txt")
-        )
+    with torch.no_grad():
+        pred = model(img_t)[0].numpy()
 
-        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        h, w = img.shape
+    pred_pts = get_coords(pred)
 
-        gt = load_annotations(ann_path)
+    gt_pts = []
+    with open(f"data/annotations/{name.replace('.bmp','.txt')}") as f:
+        for line in f.readlines()[:19]:
+            x, y = map(float, line.split(','))
+            x = x * IMG_SIZE / w
+            y = y * IMG_SIZE / h
+            gt_pts.append((x, y))
 
-        img_resized = cv2.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
-        img_tensor = torch.tensor(
-            img_resized / 255.0,
-            dtype=torch.float32
-        ).unsqueeze(0).unsqueeze(0)
+    for p, g in zip(pred_pts, gt_pts):
+        dist_px = np.linalg.norm(np.array(p) - np.array(g))
+        dist_mm = dist_px * PIXEL_TO_MM
+        if dist_mm <= THRESH_MM:
+            correct += 1
+        total += 1
 
-        with torch.no_grad():
-            heatmaps = model(img_tensor)[0]
+accuracy = correct / total * 100
+print(f"🎯 Accuracy within 2mm: {accuracy:.2f}%")
 
-        for i in range(len(gt)):
-            px, py = heatmap_to_coord(heatmaps[i])
-
-            px = px * w / IMAGE_SIZE
-            py = py * h / IMAGE_SIZE
-
-            gx, gy = gt[i]
-
-            dist = np.sqrt((px - gx) ** 2 + (py - gy) ** 2)
-
-            if dist <= MM_THRESHOLD:
-                correct += 1
-
-            total += 1
-
-    accuracy = (correct / total) * 100
-    print("✅ Prediction & evaluation completed")
-    print(f"🎯 Accuracy within 2 mm: {accuracy:.2f}%")
-
-    if accuracy >= 90:
-        print("🎉 Acceptance criteria MET (≥ 90%)")
-    else:
-        print("⚠️ Acceptance criteria NOT met (< 90%)")
-
-if __name__ == "__main__":
-    main()
+if accuracy >= 90:
+    print("✅ COMPANY REQUIREMENT MET")
+else:
+    print("⚠️ COMPANY REQUIREMENT NOT MET")
