@@ -1,6 +1,6 @@
-# --------------------
-# Dataset & Images
-# --------------------
+# ====================
+# DATASETS (IGNORE)
+# ====================
 data/
 dataset/
 datasets/
@@ -12,39 +12,41 @@ labels/
 *.jpg
 *.jpeg
 
-# --------------------
-# Outputs & Results
-# --------------------
-outputs/*
-!outputs/accuracy_report.xlsx
+# ====================
+# OUTPUTS (IGNORE ALL)
+# ====================
+outputs/
+outputs/images/
+outputs/predictions/
+outputs/results/
 
-results/
-predictions/
-runs/
+# ====================
+# CSV & TEMP FILES
+# ====================
 *.csv
 
-# --------------------
-# Model files
-# --------------------
+# ====================
+# MODEL FILES (OPTIONAL)
+# ====================
 *.pth
 *.pt
 *.h5
 
-# --------------------
-# Python cache
-# --------------------
+# ====================
+# PYTHON CACHE
+# ====================
 __pycache__/
 *.pyc
 
-# --------------------
-# Environment
-# --------------------
+# ====================
+# ENVIRONMENT
+# ====================
 venv/
 env/
 
-# --------------------
-# OS / Editor files
-# --------------------
-.DS_Store
+# ====================
+# EDITOR / OS FILES
+# ====================
 .vscode/
 .idea/
+.DS_Store
